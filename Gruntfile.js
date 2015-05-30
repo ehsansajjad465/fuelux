@@ -7,7 +7,7 @@ module.exports = function (grunt) {
 	var isLivereloadEnabled = (typeof grunt.option('livereload') !== 'undefined') ? grunt.option('livereload') : true;
 
 	var semver = require('semver');
-	var currentVersion = require('./package.json').version;
+	var packageVersion = require('./package.json').version;
 
 	// Project configuration.
 	grunt.initConfig({
@@ -35,12 +35,15 @@ module.exports = function (grunt) {
 				gitDescribeOptions: '--tags --always --abbrev=1 --dirty=-d'
 			}
 		},
+		minorReleaseBranch: '3.7.x',
+		majorReleaseBranch: '3.x',
 		jqueryCheck: 'if (typeof jQuery === \'undefined\') { throw new Error(\'Fuel UX\\\'s JavaScript requires jQuery\') }\n\n',
 		bootstrapCheck: 'if (typeof jQuery.fn.dropdown === \'undefined\' || typeof jQuery.fn.collapse === \'undefined\') ' +
 		'{ throw new Error(\'Fuel UX\\\'s JavaScript requires Bootstrap\') }\n\n',
 		pkg: grunt.file.readJSON('package.json'),
 		// Try ENV variables (export SAUCE_ACCESS_KEY=XXXX), if key doesn't exist, try key file
 		sauceLoginFile: grunt.file.exists('SAUCE_API_KEY.yml') ? grunt.file.readYAML('SAUCE_API_KEY.yml') : undefined,
+		cdnLoginFile: grunt.file.exists('FUEL_CDN.yml') ? grunt.file.readYAML('FUEL_CDN.yml') : undefined,
 		sauceUser: process.env.SAUCE_USERNAME || 'fuelux',
 		sauceKey: process.env.SAUCE_ACCESS_KEY ? process.env.SAUCE_ACCESS_KEY : '<%= sauceLoginFile.key %>',
 		// TEST URLS
@@ -324,33 +327,53 @@ module.exports = function (grunt) {
 
 		},
 		prompt: {
-			bump: {
+			'releaseTasks': {
 				options: {
 					questions: [
 						{
-							config: 'bump.increment',
+							config: 'releaseTask',
 							type: 'list',
-							message: 'Bump version from ' + '<%= pkg.version %>' + ' to:',
+							message: 'What would you like to do?',
 							choices: [
-								// {
-								// 	value: 'build',
-								// 	name:  'Build:  '+ (currentVersion + '-?') + ' Unstable, betas, and release candidates.'
-								// },
 								{
 									value: 'patch',
-									name: 'Patch:  ' + semver.inc(currentVersion, 'patch') + ' Backwards-compatible bug fixes.'
+									name: 'Patch:  ' + semver.inc(packageVersion, 'patch') + ' Backwards-compatible bug fixes.'
 								},
 								{
 									value: 'minor',
-									name: 'Minor:  ' + semver.inc(currentVersion, 'minor') + ' Add functionality in a backwards-compatible manner.'
+									name: 'Minor:  ' + semver.inc(packageVersion, 'minor') + ' Add functionality in a backwards-compatible manner.'
 								},
 								{
 									value: 'major',
-									name: 'Major:  ' + semver.inc(currentVersion, 'major') + ' Incompatible API changes.'
+									name: 'Major:  ' + semver.inc(packageVersion, 'major') + ' Incompatible API changes.'
 								},
 								{
 									value: 'custom',
 									name: 'Custom: ?.?.? Specify version...'
+								},
+								{
+									value: 'commit',
+									name: 'Stage and commit build files'
+								},
+								{
+									value: 'tag',
+									name: 'Tag current commit for release'
+								},
+								{
+									value: 'pushPatchToOrigin',
+									name: 'Push patch commits to origin\'s minor release branch '
+								},
+								{
+									value: 'pushMinorToOrigin',
+									name: 'Push minor commits to origin\'s major release branch'
+								},
+								{
+									value: 'upload',
+									name: 'Upload dist folder to CDN server'
+								},
+								{
+									value: 'exit',
+									name: 'Exit'
 								}
 							]
 						},
@@ -418,6 +441,144 @@ module.exports = function (grunt) {
 					build: process.env.TRAVIS_BUILD_NUMBER || '<%= pkg.version %>',
 					testname: 'grunt-<%= grunt.template.today("dddd, mmmm dS, yyyy, h:MM:ss TT") %>',
 					urls: '<%= allTestUrls %>'
+				}
+			}
+		},
+		shell: {
+			// Compile release notes while waiting for tests to pass. Needs Ruby gem. 
+			// Install with: gem install github_changelog_generator
+			notes: {
+				command: 'github_changelog_generator --no-author --unreleased-only --compare-link'
+			},
+			mergeLocalMasterAndMinorBranch: {
+				command: function() {
+					var command = [
+						'git checkout master',
+						'git pull origin master',
+						'git checkout ' + grunt.config('majorReleaseBranch'),
+						'git pull origin ' + grunt.config('majorReleaseBranch'), 
+						'git merge master '
+					].join(' && ')
+					grunt.log.write(command);
+					return command;
+				}
+
+			},
+			checkoutPatchBranch: {
+				command: function() {
+					var command = [
+						'git checkout ' + grunt.config('minorReleaseBranch'),
+						'git pull origin ' + grunt.config('minorReleaseBranch')
+					].join(' && ')
+					grunt.log.write(command);
+					return command;
+				}
+			},
+			addReleaseFiles: {
+				command: function() {
+					var command = [
+						'git add dist README.md DETAILS.md bower.json package.json'
+					].join(' && ')
+					grunt.log.write(command);
+					return command;
+				}
+			},
+			commit: {
+				command: function() {
+					var command = [
+						'git commit -m "release ' + grunt.config('pkg.version') + '"'
+					].join(' && ')
+					grunt.log.write(command);
+					return command;
+				}
+			},
+			tag: {
+				command: function() {
+					var command = [
+						'git tag -a "' + grunt.config('pkg.version') + '" -m "' + grunt.config('pkg.version') + '"'
+					].join(' && ')
+					grunt.log.write(command);
+					return command;
+				}
+			},
+			pushLocalMinorBranchToOrigin: {
+				command: function() {
+					var command = [
+						'git push origin ' + grunt.config('majorReleaseBranch')
+					].join(' && ')
+					grunt.log.write(command);
+					return command;
+				}
+			},
+			// needs manual update before release freeze
+			pushLocalPatchBranchToOrigin: {
+				command: function() {
+					var command = [
+						'git push origin ' + grunt.config('minorReleaseBranch')
+					].join(' && ')
+					grunt.log.write(command);
+					return command;
+				}
+			},
+			pushTagToOrigin: {
+				command: function() {
+					var command = [
+						'git push origin ' + packageVersion
+					].join(' && ')
+					grunt.log.write(command);
+					return command;
+				}
+			},
+			pushLocalMinorBranchToOriginMaster: {
+				command: function() {
+					var command = [
+						'git push origin ' + grunt.config('majorReleaseBranch') + ':master'
+					].join(' && ')
+					grunt.log.write(command);
+					return command;
+				}
+			},
+			mergeLocalPatchBranchToHead: {
+				command: function() {
+					var command = [
+						'git merge ' + grunt.config('minorReleaseBranch')
+					].join(' && ')
+					grunt.log.write(command);
+					return command;
+				}
+			},
+			// syncs local and origin branches
+			pushLocalMasterToOriginMaster: {
+				command: function() {
+					var command = [
+						'git push origin master'
+					].join(' && ')
+					grunt.log.write(command);
+					return command;
+				}
+			},
+			// syncs local and origin branches
+			pullOriginMasterToLocal: {
+				command: function() {
+					var command = [
+						'git checkout master',
+						'git pull origin master'
+					].join(' && ')
+					grunt.log.write(command);
+					return command;
+				}
+			},
+			upload: {
+				command: function() {
+					var command = [
+						'mv dist ' + '<%= pkg.version %>',
+						'scp -i ~/.ssh/fuelcdn -r "' + '<%= pkg.version %>' + '"/ ' + 
+						'<%= cdnLoginFile.user %>' + '@' + '<%= cdnLoginFile.server %>' + ':' + '<%= cdnLoginFile.folder %>',
+						'mv "' + '<%= pkg.version %>' + '" dist',
+						'echo "Done uploading files."'
+					].join(' && ')
+					grunt.log.write(command);
+					return command;
 				}
 			}
 		},
@@ -522,7 +683,6 @@ module.exports = function (grunt) {
 		scope: 'devDependencies'
 	});
 
-
 	/* -------------
 		BUILD
 	------------- */
@@ -596,14 +756,75 @@ module.exports = function (grunt) {
 		RELEASE
 	------------- */
 	// Maintainers: Run prior to a release. Includes SauceLabs VM tests.
-	grunt.registerTask('release', 'Release a new version, push it and publish it', ['prompt:bump', 'dorelease']);
-	grunt.registerTask('dorelease', '', function () {
-		if (typeof grunt.config('bump.increment') === 'undefined') {
+	grunt.registerTask('release', 'Select tasks to release a new version', ['prompt:releaseTasks', 'release-tasks']);
+
+	grunt.registerTask('release-tasks', function() {
+		var task = grunt.config('releaseTask');
+
+		grunt.config('banner', '<%= bannerRelease %>');
+
+		if (task !== 'exit') {
+
+			if (task === 'releaseNotes') {
+				grunt.task.run(['notes']);
+			}
+			else if (task === 'checkoutPatchBranch') {
+			}
+			else if (task === 'checkoutMinorBranch') {
+				grunt.task.run(['shell:mergeLocalMasterAndMinorBranch', 'pullOriginMasterToLocal']);
+			}
+			else if(task === 'patch' || task === 'minor' || task === 'major' || task === 'custom') {
+
+				if (grunt.config('releaseTask') === 'patch') {
+					grunt.task.run(['shell:checkoutPatchBranch']);
+				}
+				else if (grunt.config('releaseTask') === 'minor') {
+					grunt.task.run(['shell:mergeLocalMasterAndMinorBranch']);	
+				}
+
+				grunt.task.run(['releasetest', 'clean:screenshots', 
+					'bump-only:' + grunt.config('releaseTask'), 'replace:readme', 'dist']);
+			}
+			else if(task === 'commit') {
+				grunt.task.run(['shell:addReleaseFiles', 'shell:commit']);
+			}
+			else if(task === 'tag') {
+				grunt.task.run(['shell:tag']);
+			}
+			else if(task === 'pushPatchBranchToOrigin') {
+				grunt.task.run(['shell:pushLocalPatchBranchToOrigin', 'shell:pushTagToOrigin', 'shell:pullOriginMasterToLocal', 
+			'shell:mergeLocalPatchBranchToHead', 'shell:pushLocalMasterToOriginMaster']);
+			}
+			else if(task === 'pushMinorBranchToOrigin') {
+				grunt.task.run(['shell:pushLocalPatchBranchToOrigin', 'shell:pushTagToOrigin', 'shell:pushLocalPatchBranchToOriginMaster', 
+				'shell:pullOriginMasterToLocal']);
+			}
+			else if(task === 'upload') {
+				grunt.task.run(['shell:upload']);
+			}
+
+		}
+
+	});
+
+	grunt.registerTask('notes', 'Run a ruby gem that will request from Github unreleased pull requests', ['shell:notes']);
+
+	// formerally dorelease task
+	grunt.registerTask('bump-test-build', '', function () {
+		if (typeof grunt.config('releaseTask') === 'undefined') {
 			grunt.fail.fatal('you must choose a version to bump to');
 		}
 
+		if (grunt.config('releaseTask') === 'patch') {
+			grunt.task.run(['shell:checkoutPatchBranch']);
+		}
+		else if (grunt.config('releaseTask') === 'minor') {
+			grunt.task.run(['shell:checkoutminorBranch']);	
+		}
+
+
 		grunt.log.writeln('');
-		grunt.log.oklns('releasing: ', grunt.config('bump.increment'));
+		grunt.log.oklns('releasing: ', grunt.config('releaseTask'));
 
 		if (!grunt.option('no-tests')) {
 			grunt.task.run(['releasetest']); //If phantom timeouts happening because of long-running qunit tests, look into setting `resourceTimeout` in phantom: http://phantomjs.org/api/webpage/property/settings.html
@@ -614,8 +835,9 @@ module.exports = function (grunt) {
 		}
 
 		grunt.config('banner', '<%= bannerRelease %>');
+
 		// Run dist again to grab the latest version numbers. Yeah, we're running it twice... ¯\_(ツ)_/¯
-		grunt.task.run(['bump-only:' + grunt.config('bump.increment'), 'replace:readme', 'dist']);
+		grunt.task.run(['bump-only:' + grunt.config('releaseTask'), 'replace:readme', 'dist'] );
 	});
 
 

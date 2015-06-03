@@ -445,7 +445,7 @@ module.exports = function (grunt) {
 			}
 		},
 		shell: {
-			// Compile release notes while waiting for tests to pass. Needs Ruby gem. 
+			// Compile release notes while waiting for tests to pass. Needs Ruby gem.
 			// Install with: gem install github_changelog_generator
 			notes: {
 				command: 'github_changelog_generator --no-author --unreleased-only --compare-link'
@@ -456,9 +456,9 @@ module.exports = function (grunt) {
 						'git checkout master',
 						'git pull origin master',
 						'git checkout ' + grunt.config('majorReleaseBranch'),
-						'git pull origin ' + grunt.config('majorReleaseBranch'), 
+						'git pull origin ' + grunt.config('majorReleaseBranch'),
 						'git merge master '
-					].join(' && ')
+					].join(' && ');
 					grunt.log.write(command);
 					return command;
 				}
@@ -469,7 +469,7 @@ module.exports = function (grunt) {
 					var command = [
 						'git checkout ' + grunt.config('minorReleaseBranch'),
 						'git pull origin ' + grunt.config('minorReleaseBranch')
-					].join(' && ')
+					].join(' && ');
 					grunt.log.write(command);
 					return command;
 				}
@@ -478,7 +478,7 @@ module.exports = function (grunt) {
 				command: function() {
 					var command = [
 						'git add dist README.md DETAILS.md bower.json package.json'
-					].join(' && ')
+					].join(' && ');
 					grunt.log.write(command);
 					return command;
 				}
@@ -487,7 +487,7 @@ module.exports = function (grunt) {
 				command: function() {
 					var command = [
 						'git commit -m "release ' + grunt.config('pkg.version') + '"'
-					].join(' && ')
+					].join(' && ');
 					grunt.log.write(command);
 					return command;
 				}
@@ -496,7 +496,7 @@ module.exports = function (grunt) {
 				command: function() {
 					var command = [
 						'git tag -a "' + grunt.config('pkg.version') + '" -m "' + grunt.config('pkg.version') + '"'
-					].join(' && ')
+					].join(' && ');
 					grunt.log.write(command);
 					return command;
 				}
@@ -505,7 +505,7 @@ module.exports = function (grunt) {
 				command: function() {
 					var command = [
 						'git push origin ' + grunt.config('majorReleaseBranch')
-					].join(' && ')
+					].join(' && ');
 					grunt.log.write(command);
 					return command;
 				}
@@ -515,7 +515,7 @@ module.exports = function (grunt) {
 				command: function() {
 					var command = [
 						'git push origin ' + grunt.config('minorReleaseBranch')
-					].join(' && ')
+					].join(' && ');
 					grunt.log.write(command);
 					return command;
 				}
@@ -524,7 +524,7 @@ module.exports = function (grunt) {
 				command: function() {
 					var command = [
 						'git push origin ' + packageVersion
-					].join(' && ')
+					].join(' && ');
 					grunt.log.write(command);
 					return command;
 				}
@@ -533,7 +533,7 @@ module.exports = function (grunt) {
 				command: function() {
 					var command = [
 						'git push origin ' + grunt.config('majorReleaseBranch') + ':master'
-					].join(' && ')
+					].join(' && ');
 					grunt.log.write(command);
 					return command;
 				}
@@ -542,7 +542,7 @@ module.exports = function (grunt) {
 				command: function() {
 					var command = [
 						'git merge ' + grunt.config('minorReleaseBranch')
-					].join(' && ')
+					].join(' && ');
 					grunt.log.write(command);
 					return command;
 				}
@@ -552,7 +552,7 @@ module.exports = function (grunt) {
 				command: function() {
 					var command = [
 						'git push origin master'
-					].join(' && ')
+					].join(' && ');
 					grunt.log.write(command);
 					return command;
 				}
@@ -563,7 +563,7 @@ module.exports = function (grunt) {
 					var command = [
 						'git checkout master',
 						'git pull origin master'
-					].join(' && ')
+					].join(' && ');
 					grunt.log.write(command);
 					return command;
 				}
@@ -572,11 +572,11 @@ module.exports = function (grunt) {
 				command: function() {
 					var command = [
 						'mv dist ' + '<%= pkg.version %>',
-						'scp -i ~/.ssh/fuelcdn -r "' + '<%= pkg.version %>' + '"/ ' + 
+						'scp -i ~/.ssh/fuelcdn -r "' + '<%= pkg.version %>' + '"/ ' +
 						'<%= cdnLoginFile.user %>' + '@' + '<%= cdnLoginFile.server %>' + ':' + '<%= cdnLoginFile.folder %>',
 						'mv "' + '<%= pkg.version %>' + '" dist',
 						'echo "Done uploading files."'
-					].join(' && ')
+					].join(' && ');
 					grunt.log.write(command);
 					return command;
 				}
@@ -779,10 +779,10 @@ module.exports = function (grunt) {
 					grunt.task.run(['shell:checkoutPatchBranch']);
 				}
 				else if (grunt.config('releaseTask') === 'minor') {
-					grunt.task.run(['shell:mergeLocalMasterAndMinorBranch']);	
+					grunt.task.run(['shell:mergeLocalMasterAndMinorBranch']);
 				}
 
-				grunt.task.run(['releasetest', 'clean:screenshots', 
+				grunt.task.run(['releasetest', 'clean:screenshots',
 					'bump-only:' + grunt.config('releaseTask'), 'replace:readme', 'dist']);
 			}
 			else if(task === 'commit') {
@@ -792,11 +792,11 @@ module.exports = function (grunt) {
 				grunt.task.run(['shell:tag']);
 			}
 			else if(task === 'pushPatchBranchToOrigin') {
-				grunt.task.run(['shell:pushLocalPatchBranchToOrigin', 'shell:pushTagToOrigin', 'shell:pullOriginMasterToLocal', 
+				grunt.task.run(['shell:pushLocalPatchBranchToOrigin', 'shell:pushTagToOrigin', 'shell:pullOriginMasterToLocal',
 			'shell:mergeLocalPatchBranchToHead', 'shell:pushLocalMasterToOriginMaster']);
 			}
 			else if(task === 'pushMinorBranchToOrigin') {
-				grunt.task.run(['shell:pushLocalPatchBranchToOrigin', 'shell:pushTagToOrigin', 'shell:pushLocalPatchBranchToOriginMaster', 
+				grunt.task.run(['shell:pushLocalPatchBranchToOrigin', 'shell:pushTagToOrigin', 'shell:pushLocalPatchBranchToOriginMaster',
 				'shell:pullOriginMasterToLocal']);
 			}
 			else if(task === 'upload') {
@@ -819,7 +819,7 @@ module.exports = function (grunt) {
 			grunt.task.run(['shell:checkoutPatchBranch']);
 		}
 		else if (grunt.config('releaseTask') === 'minor') {
-			grunt.task.run(['shell:checkoutminorBranch']);	
+			grunt.task.run(['shell:checkoutminorBranch']);
 		}
 
 

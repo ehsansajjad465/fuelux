@@ -35,8 +35,13 @@ module.exports = function (grunt) {
 				gitDescribeOptions: '--tags --always --abbrev=1 --dirty=-d'
 			}
 		},
-		minorReleaseBranch: '3.7.x',
-		majorReleaseBranch: '3.x',
+		// default variables for release task
+		release: {
+			files: ['dist', 'README.md', 'DETAILS.md', 'bower.json', 'package.json'],
+			localBranch: 'release',
+			remoteBranch: '3.x',
+			remoteRepository: 'upstream',
+		},
 		jqueryCheck: 'if (typeof jQuery === \'undefined\') { throw new Error(\'Fuel UX\\\'s JavaScript requires jQuery\') }\n\n',
 		bootstrapCheck: 'if (typeof jQuery.fn.dropdown === \'undefined\' || typeof jQuery.fn.collapse === \'undefined\') ' +
 		'{ throw new Error(\'Fuel UX\\\'s JavaScript requires Bootstrap\') }\n\n',
@@ -327,11 +332,12 @@ module.exports = function (grunt) {
 
 		},
 		prompt: {
-			'releaseTasks': {
+			// asks for what version you want to build
+			'build': {
 				options: {
 					questions: [
 						{
-							config: 'releaseTask',
+							config: 'release.buildSemVerType',
 							type: 'list',
 							message: 'What would you like to do?',
 							choices: [
@@ -350,46 +356,168 @@ module.exports = function (grunt) {
 								{
 									value: 'custom',
 									name: 'Custom: ?.?.? Specify version...'
-								},
-								{
-									value: 'commit',
-									name: 'Stage and commit build files'
-								},
-								{
-									value: 'tag',
-									name: 'Tag current commit for release'
-								},
-								{
-									value: 'pushPatchToOrigin',
-									name: 'Push patch commits to origin\'s minor release branch '
-								},
-								{
-									value: 'pushMinorToOrigin',
-									name: 'Push minor commits to origin\'s major release branch'
-								},
-								{
-									value: 'upload',
-									name: 'Upload dist folder to CDN server'
-								},
-								{
-									value: 'exit',
-									name: 'Exit'
 								}
 							]
 						},
 						{
-							config: 'bump.version',
+							// if custom bump is used with a specific version, see dorelease task
+							config: 'release.buildSemVerType',
 							type: 'input',
 							message: 'What specific version would you like',
 							when: function (answers) {
-								return answers['bump.increment'] === 'custom';
+								return answers['release.buildSemVerType'] === 'custom';
 							},
 							validate: function (value) {
 								var valid = semver.valid(value);
 								return valid || 'Must be a valid semver, such as 1.2.3-rc1. See http://semver.org/ for more details.';
 							}
+						},
+						{
+							config: 'release.remoteRepository',
+							default : 'upstream',
+							type: 'input',
+							message: function() {
+								return 'What repository would like to base your local release branch from?';
+							}
+						},
+						{
+							// Assumption is made that you are releasing the code within a "release branch" currently 
+							// on the upstream remote repo. This branch will be tracked locally and be used to run 
+							// the build process in. It will be named release_{BUILD_VERSION}_{MMSS} (that is, it will
+							// use the version specified earlier and a "mini-timestamp" of the current hour and minute).
+							config: 'release.remoteBranch',
+							type: 'input',
+							default : '3.x',
+							message: function() {
+								return 'What remote branch from ' + grunt.config('release.remoteRepository') + 
+								' would like to build your release based upon?';
+							}
 						}
 					]
+				}
+			},
+			'commit': {
+				options: {
+					questions: [
+						{
+							config: 'release.commit',
+							type: 'confirm',
+							message: 'Please review your files. Would you like to commit?'
+						}
+					],
+					then: function (answers, done) {
+						if (answers['release.commit'] === true) {
+							grunt.task.run(['shell:commit']);
+						}
+						return false;
+					}
+				}
+			},
+			'tag': {
+				options: {
+					questions: [
+						{
+							config: 'release.tag',
+							type: 'confirm',
+							message: 'Would you like to tag as ' + '<%= pkg.version %>' + '?'
+						}
+					],
+					then: function (answers, done) {
+						if (answers['release.tag'] === true) {
+							grunt.task.run(['shell:tag']);
+						}
+						return false;
+					}
+				}
+			},
+			'pushLocalBranchToUpstream': {
+				options: {
+					questions: [
+						{
+							config: 'release.upstreamBranch',
+							type: 'input',
+							message: function() {
+								return 'What upstream branch would you like to push ' + grunt.config('release.remoteBranch') + 
+									' to (probably ' + grunt.config('release.remoteBranch') + ')? (leave blank to skip)';
+							}
+						}
+					],
+					then: function (answers, done) {
+						if (answers['release.upstreamBranch'] !== '' && answers['release.upstreamBranch'] !== 'n' ) {
+							grunt.task.run(['shell:pushLocalBranchToUpstream']);
+						}
+						return false;
+					}
+				}
+			},
+			'pushTagToUpstream': {
+				options: {
+					questions: [
+						{
+							config: 'release.upstreamTag',
+							type: 'confirm',
+							message: 'Would you like to push tag ' + '<%= pkg.version %>' + ' to upstream?'
+						}
+					],
+					then: function (answers, done) {
+						if (answers['release.upstreamTag'] === true) {
+							grunt.task.run(['shell:pushTagToUpstream']);
+						}
+						return false;
+					}
+				}
+			},
+			'uploadToCDN': {
+				options: {
+					questions: [
+						{
+							config: 'release.uploadToCDN',
+							type: 'confirm',
+							message: 'Would you like to upload the `dist folder to fuelcdn.com?'
+						}
+					],
+					then: function (answers, done) {
+						if (answers['release.uploadToCDN'] === true) {
+							grunt.task.run(['shell:uploadToCDN']);
+						}
+						return false;
+					}
+				}
+			},
+			'pushLocalBranchToUpstreamMaster': {
+				options: {
+					questions: [
+						{
+							config: 'release.pushToUpstreamMaster',
+							type: 'confirm',
+							message: 'Would you like to push your local release branch to upstream\'s master branch?'
+						}
+					],
+					then: function (answers, done) {
+						if (answers['release.pushToUpstreamMaster'] === true) {
+							grunt.task.run(['shell:pushLocalBranchToUpstreamMaster']);
+						}
+						return false;
+					}
+				}
+			},
+			'deleteLocalReleaseBranch': {
+				options: {
+					questions: [
+						{
+							config: 'release.deleteLocalReleaseBranch',
+							type: 'confirm',
+							message: function() {
+								return 'Would you like to delete your local release branch' + grunt.config('release.remoteBranch') + '?';
+							}
+						}
+					],
+					then: function (answers, done) {
+						if (answers['release.deleteLocalReleaseBranch'] === true) {
+							grunt.task.run(['shell:deleteLocalReleaseBranch']);
+						}
+						return false;
+					}
 				}
 			}
 		},
@@ -450,125 +578,64 @@ module.exports = function (grunt) {
 			notes: {
 				command: 'github_changelog_generator --no-author --unreleased-only --compare-link'
 			},
-			mergeLocalMasterAndMinorBranch: {
+			checkoutRemoteReleaseBranch: {
+				// this makes a local branch based on the prior prompt, such as release_{BUILD_VERSION}_{HOURSMINUTES}
 				command: function() {
+					grunt.config('release.localBranch', 'release_' + semver.inc(packageVersion, grunt.config('release.buildSemVerType')) + 
+							'_' + grunt.template.today('hMM'));
 					var command = [
-						'git checkout master',
-						'git pull origin master',
-						'git checkout ' + grunt.config('majorReleaseBranch'),
-						'git pull origin ' + grunt.config('majorReleaseBranch'),
-						'git merge master '
+						'git checkout -b ' + grunt.config('release.localBranch') + ' ' + 
+							grunt.config('release.remoteRepository') + '/' + grunt.config('release.remoteBranch')
 					].join(' && ');
-					grunt.log.write(command);
-					return command;
-				}
-
-			},
-			checkoutPatchBranch: {
-				command: function() {
-					var command = [
-						'git checkout ' + grunt.config('minorReleaseBranch'),
-						'git pull origin ' + grunt.config('minorReleaseBranch')
-					].join(' && ');
-					grunt.log.write(command);
+					grunt.log.write('Checking out new local branch based on ' + grunt.config('release.remoteBranch') + ': ' + command);
 					return command;
 				}
 			},
 			addReleaseFiles: {
 				command: function() {
-					var command = [
-						'git add dist README.md DETAILS.md bower.json package.json'
-					].join(' && ');
-					grunt.log.write(command);
+					var command = 'git add ' + grunt.config('release.files').join(' ');
+					grunt.log.write('Staging: ' + command);
 					return command;
 				}
 			},
 			commit: {
 				command: function() {
-					var command = [
-						'git commit -m "release ' + grunt.config('pkg.version') + '"'
-					].join(' && ');
-					grunt.log.write(command);
+					var command = 'git commit -m "release ' + grunt.config('pkg.version') + '"';
+					grunt.log.write('Committing: ' + command);
 					return command;
 				}
 			},
 			tag: {
 				command: function() {
-					var command = [
-						'git tag -a "' + grunt.config('pkg.version') + '" -m "' + grunt.config('pkg.version') + '"'
-					].join(' && ');
-					grunt.log.write(command);
+					var command = 'git tag -a "' + grunt.config('pkg.version') + '" -m "' + grunt.config('pkg.version') + '"';
+					grunt.log.write('Tagging: ' + command);
 					return command;
 				}
 			},
-			pushLocalMinorBranchToOrigin: {
+			pushLocalBranchToUpstream: {
 				command: function() {
-					var command = [
-						'git push origin ' + grunt.config('majorReleaseBranch')
-					].join(' && ');
-					grunt.log.write(command);
+					var command = 'git push ' + grunt.config('release.remoteRepository') + ' ' +  
+							grunt.config('release.localBranch') + ':' + grunt.config('release.upstreamBranch');
+					grunt.log.write('Pushing: ' + command);
 					return command;
 				}
 			},
-			// needs manual update before release freeze
-			pushLocalPatchBranchToOrigin: {
+			pushTagToUpstream: {
 				command: function() {
-					var command = [
-						'git push origin ' + grunt.config('minorReleaseBranch')
-					].join(' && ');
-					grunt.log.write(command);
+					var command = 'git push ' + grunt.config('release.remoteRepository') + ' ' + packageVersion;
+					grunt.log.write('Publishing tag: ' + command);
 					return command;
 				}
 			},
-			pushTagToOrigin: {
+			pushLocalBranchToUpstreamMaster: {
 				command: function() {
-					var command = [
-						'git push origin ' + packageVersion
-					].join(' && ');
+					var command = 'git push ' + grunt.config('release.remoteRepository')  + ' ' + 
+						grunt.config('release.localBranch') + ':master';
 					grunt.log.write(command);
 					return command;
 				}
 			},
-			pushLocalMinorBranchToOriginMaster: {
-				command: function() {
-					var command = [
-						'git push origin ' + grunt.config('majorReleaseBranch') + ':master'
-					].join(' && ');
-					grunt.log.write(command);
-					return command;
-				}
-			},
-			mergeLocalPatchBranchToHead: {
-				command: function() {
-					var command = [
-						'git merge ' + grunt.config('minorReleaseBranch')
-					].join(' && ');
-					grunt.log.write(command);
-					return command;
-				}
-			},
-			// syncs local and origin branches
-			pushLocalMasterToOriginMaster: {
-				command: function() {
-					var command = [
-						'git push origin master'
-					].join(' && ');
-					grunt.log.write(command);
-					return command;
-				}
-			},
-			// syncs local and origin branches
-			pullOriginMasterToLocal: {
-				command: function() {
-					var command = [
-						'git checkout master',
-						'git pull origin master'
-					].join(' && ');
-					grunt.log.write(command);
-					return command;
-				}
-			},
-			upload: {
+			uploadToCDN: {
 				command: function() {
 					var command = [
 						'mv dist ' + '<%= pkg.version %>',
@@ -577,7 +644,8 @@ module.exports = function (grunt) {
 						'mv "' + '<%= pkg.version %>' + '" dist',
 						'echo "Done uploading files."'
 					].join(' && ');
-					grunt.log.write(command);
+					grunt.log.write('Uploading: ' + command);
+					grunt.log.writeln('');
 					return command;
 				}
 			}
@@ -755,76 +823,20 @@ module.exports = function (grunt) {
 	/* -------------
 		RELEASE
 	------------- */
-	// Maintainers: Run prior to a release. Includes SauceLabs VM tests.
-	grunt.registerTask('release', 'Select tasks to release a new version', ['prompt:releaseTasks', 'release-tasks']);
-
-	grunt.registerTask('release-tasks', function() {
-		var task = grunt.config('releaseTask');
-
-		grunt.config('banner', '<%= bannerRelease %>');
-
-		if (task !== 'exit') {
-
-			if (task === 'releaseNotes') {
-				grunt.task.run(['notes']);
-			}
-			else if (task === 'checkoutPatchBranch') {
-			}
-			else if (task === 'checkoutMinorBranch') {
-				grunt.task.run(['shell:mergeLocalMasterAndMinorBranch', 'pullOriginMasterToLocal']);
-			}
-			else if(task === 'patch' || task === 'minor' || task === 'major' || task === 'custom') {
-
-				if (grunt.config('releaseTask') === 'patch') {
-					grunt.task.run(['shell:checkoutPatchBranch']);
-				}
-				else if (grunt.config('releaseTask') === 'minor') {
-					grunt.task.run(['shell:mergeLocalMasterAndMinorBranch']);
-				}
-
-				grunt.task.run(['releasetest', 'clean:screenshots',
-					'bump-only:' + grunt.config('releaseTask'), 'replace:readme', 'dist']);
-			}
-			else if(task === 'commit') {
-				grunt.task.run(['shell:addReleaseFiles', 'shell:commit']);
-			}
-			else if(task === 'tag') {
-				grunt.task.run(['shell:tag']);
-			}
-			else if(task === 'pushPatchBranchToOrigin') {
-				grunt.task.run(['shell:pushLocalPatchBranchToOrigin', 'shell:pushTagToOrigin', 'shell:pullOriginMasterToLocal',
-			'shell:mergeLocalPatchBranchToHead', 'shell:pushLocalMasterToOriginMaster']);
-			}
-			else if(task === 'pushMinorBranchToOrigin') {
-				grunt.task.run(['shell:pushLocalPatchBranchToOrigin', 'shell:pushTagToOrigin', 'shell:pushLocalPatchBranchToOriginMaster',
-				'shell:pullOriginMasterToLocal']);
-			}
-			else if(task === 'upload') {
-				grunt.task.run(['shell:upload']);
-			}
-
-		}
-
-	});
-
 	grunt.registerTask('notes', 'Run a ruby gem that will request from Github unreleased pull requests', ['shell:notes']);
 
+	// Maintainers: Run prior to a release. Includes SauceLabs VM tests.
+	grunt.registerTask('release', 'Select tasks to release a new version', ['prompt:build', 'dorelease']);
+
 	// formerally dorelease task
-	grunt.registerTask('bump-test-build', '', function () {
-		if (typeof grunt.config('releaseTask') === 'undefined') {
+	grunt.registerTask('dorelease', '', function () {
+		if (typeof grunt.config('release.buildSemVerType') === 'undefined') {
 			grunt.fail.fatal('you must choose a version to bump to');
 		}
 
-		if (grunt.config('releaseTask') === 'patch') {
-			grunt.task.run(['shell:checkoutPatchBranch']);
-		}
-		else if (grunt.config('releaseTask') === 'minor') {
-			grunt.task.run(['shell:checkoutminorBranch']);
-		}
-
-
+		grunt.task.run(['shell:checkoutRemoteReleaseBranch']);
 		grunt.log.writeln('');
-		grunt.log.oklns('releasing: ', grunt.config('releaseTask'));
+		grunt.log.oklns('releasing: ', grunt.config('release.buildSemVerType'));
 
 		if (!grunt.option('no-tests')) {
 			grunt.task.run(['releasetest']); //If phantom timeouts happening because of long-running qunit tests, look into setting `resourceTimeout` in phantom: http://phantomjs.org/api/webpage/property/settings.html
@@ -837,7 +849,9 @@ module.exports = function (grunt) {
 		grunt.config('banner', '<%= bannerRelease %>');
 
 		// Run dist again to grab the latest version numbers. Yeah, we're running it twice... ¯\_(ツ)_/¯
-		grunt.task.run(['bump-only:' + grunt.config('releaseTask'), 'replace:readme', 'dist'] );
+		grunt.task.run(['bump-only:' + grunt.config('release.buildSemVerType'), 'replace:readme', 'dist', 
+			'shell:addReleaseFiles', 'prompt:commit', 'prompt:tag', 'prompt:pushLocalBranchToUpstream', 
+			'prompt:pushTagToUpstream', 'prompt:uploadToCDN', 'prompt:pushLocalBranchToUpstreamMaster']);
 	});
 
 
